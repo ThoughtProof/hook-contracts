@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "../BaseERC8183Hook.sol";
-import "../interfaces/IERC8183HookMetadata.sol";
+import {BaseERC8183Hook} from "../BaseERC8183Hook.sol";
+import {IERC8183HookMetadata} from "../interfaces/IERC8183HookMetadata.sol";
 
 /// @title IReasoningVerifier
 /// @notice Minimal interface for on-chain reasoning verification.
@@ -90,7 +90,8 @@ contract ReasoningVerifierHook is BaseERC8183Hook, IERC8183HookMetadata {
         IReasoningVerifier verifier_,
         uint256 minConfidence_
     ) BaseERC8183Hook(erc8183Contract_) {
-        if (erc8183Contract_ == address(0) || address(verifier_) == address(0)) revert InvalidParameters();
+        // erc8183Contract_ zero-check is enforced by BaseERC8183Hook (InvalidERC8183Contract).
+        if (address(verifier_) == address(0)) revert InvalidParameters();
         if (minConfidence_ < 100 || minConfidence_ > MAX_CONFIDENCE) revert InvalidParameters();
         verifier = verifier_;
         minConfidence = minConfidence_;
@@ -112,6 +113,13 @@ contract ReasoningVerifierHook is BaseERC8183Hook, IERC8183HookMetadata {
         // Prevent replay of the same (jobId, caller) pair
         if (_consumed[jobId][caller]) revert AlreadyConsumed(jobId, caller);
 
+        // Checks-Effects-Interactions: mark consumed BEFORE the external verifier
+        // call. If the verifier reverts (NotVerified / ConfidenceTooLow paths below
+        // both revert), Solidity rolls this write back atomically, so a rejected
+        // submission does not burn the (jobId, caller) slot. Setting it first closes
+        // any reentrancy path through a (mis)behaving verifier.
+        _consumed[jobId][caller] = true;
+
         // Query verifier with full context (jobId + caller + deliverable)
         (bool verified, uint256 confidence) = verifier.verifyReasoning(jobId, caller, deliverable);
 
@@ -125,9 +133,6 @@ contract ReasoningVerifierHook is BaseERC8183Hook, IERC8183HookMetadata {
         if (confidence < minConfidence) {
             revert ConfidenceTooLow(deliverable, confidence, minConfidence);
         }
-
-        // Mark as consumed — single-use per (jobId, caller)
-        _consumed[jobId][caller] = true;
 
         // Emit audit trail event
         emit ReasoningVerified(jobId, caller, deliverable, confidence);

@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
 import {IERC8183Hook} from "@erc8183/IERC8183Hook.sol";
+import {BaseERC8183Hook} from "../contracts/BaseERC8183Hook.sol";
 import {IERC8183HookMetadata} from "../contracts/interfaces/IERC8183HookMetadata.sol";
 import {IReasoningVerifier, ReasoningVerifierHook} from "../contracts/hooks/ReasoningVerifierHook.sol";
 
@@ -101,7 +102,7 @@ contract ReasoningVerifierHookTest is Test {
     }
 
     function test_Deployment_RevertZeroCore() public {
-        vm.expectRevert(ReasoningVerifierHook.InvalidParameters.selector);
+        vm.expectRevert(BaseERC8183Hook.InvalidERC8183Contract.selector);
         new ReasoningVerifierHook(address(0), IReasoningVerifier(address(mockVerifier)), MIN_CONFIDENCE);
     }
 
